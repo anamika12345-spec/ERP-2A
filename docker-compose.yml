@@ -59,7 +59,7 @@ services:
       ENVIRONMENT: production
       SERVICE_ROLE: api
       DEBUG: "false"
-      CORS_ORIGINS: ${CORS_ORIGINS:-["https://app.auraitsol.com"]}
+      CORS_ORIGINS: ${CORS_ORIGINS:? Set CORS_ORIGINS in .env}
       SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     depends_on:

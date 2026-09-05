@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -52,6 +54,14 @@ services:
   backend:
     build:
       context: ./backend
+    # Traefik routing relies on Coolify management labels to map paths
+    labels:
+      - "coolify.managed=true"
+      # Match requests going to your domain that start with /api
+      - "traefik.http.routers.backend.rule=Host(`${COOLIFY_FQDN}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.backend.entrypoints=websecure"
+      - "traefik.http.routers.backend.tls=true"
+      - "coolify.port=8000"
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-small_office}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-small_office}
       REDIS_URL: redis://redis:6379/0
@@ -59,6 +69,7 @@ services:
       ENVIRONMENT: production
       SERVICE_ROLE: api
       DEBUG: "false"
+      # No longer strict since we bypass CORS, but kept for security compliance
       CORS_ORIGINS: ${CORS_ORIGINS:-["https://app.auraitsol.com"]}
       SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -103,12 +114,21 @@ services:
     build:
       context: ./frontend
       args:
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/v1}
+        # Vite will make API calls relative to the current host domain
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
+    labels:
+      - "coolify.managed=true"
+      # Handles all remaining fallback requests for your root domain
+      - "traefik.http.routers.frontend.rule=Host(`${COOLIFY_FQDN}`)"
+      - "traefik.http.routers.frontend.entrypoints=websecure"
+      - "traefik.http.routers.frontend.tls=true"
+      - "coolify.port=8080"
     depends_on:
       backend:
         condition: service_healthy
-    ports:
-      - "127.0.0.1:${HTTP_PORT:-8080}:8080"
+    # Removed host binding restriction (ports key) so Coolify's proxy handles traffic mapping internally
+    expose:
+      - "8080"
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8080/"]
       interval: 15s
